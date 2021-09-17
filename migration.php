@@ -2,8 +2,9 @@
 
 namespace migration;
 
+use MigrationException;
 use PDO;
-use ValidationQuery\ValidationQuery;
+use ValidationQuery\MigrationQueries;
 
 class migration
 {
@@ -11,40 +12,109 @@ class migration
      * @var PDO
      */
     private $connection;
-        /**
+    /**
      * @var array|null
      */
     private $config = [
-        'table' => null
+        'table' => null,
+        'migrations_dir' => null
     ];
 
+    /**
+     * @param PDO $connection
+     * @param array|null $config
+     * @throws MigrationException
+     */
     public function __construct(PDO $connection, array $config = null)
     {
+        if (!$config['migrations_dir'])
+            throw new MigrationException("O diretório das migrations é obrigatório");
         $this->config = array_merge($this->config, $config);
         $this->connection = $connection;
         $this->checkIfMigrationTableExists();
     }
 
-    public static function run(PDO $connection, array $config = null){
+    /**
+     * @param PDO $connection
+     * @param array|null $config
+     * @return bool
+     * @throws MigrationException
+     */
+    public static function run(PDO $connection, array $config = null)
+    {
         return (new self($connection, $config))->migrate();
     }
 
-    public function migrate(){
+    /**
+     * @return bool
+     */
+    public function migrate()
+    {
 
         return true;
     }
 
+    /**
+     * @throws MigrationException
+     */
     private function checkIfMigrationTableExists()
     {
-        $query = $this->connection->prepare(ValidationQuery::MigrationExistsSQL($this->config['table']));
-        $result = $query->execute();
-        if(!$result || $result['qtd'] < 1){
+        $query = $this->connection->prepare(MigrationQueries::MigrationExistsSQL($this->config['table']));
+        $query->execute();
+        $result = $query->fetch();
+        if (!$result || $result['qtd'] < 1) {
             $this->createMigrationTable();
         }
+
+        $migrated = $this->getMigrated();
+        $migrations = $this->getFilesMigration();
+        $this->compareMigrationWithMigrated($migrated, $migrations);
     }
+
 
     private function createMigrationTable()
     {
-        $this->connection->exec(ValidationQuery::createMigrationTableSQL($this->config['table']));
+        $this->connection->exec(MigrationQueries::createMigrationTableSQL($this->config['table']));
+    }
+
+    /**
+     * @param $migrated
+     * @param $migrations
+     */
+    private function compareMigrationWithMigrated($migrated, $migrations)
+    {
+        $toMigrate = array_diff($migrated, $migrations);
+        var_dump($toMigrate);
+    }
+
+    /**
+     * @return mixed
+     */
+    private function getMigrated()
+    {
+        $query = $this->connection->prepare(MigrationQueries::getMigrated($this->config['table']));
+        $query->execute();
+        return $query->fetch();
+    }
+
+    /**
+     * @throws MigrationException
+     */
+    private function getFilesMigration()
+    {
+        $this->checkIfDirExists();
+        return scandir($this->config['migrations_dir']);
+    }
+
+    /**
+     * @return void
+     * @throws MigrationException
+     */
+    private function checkIfDirExists()
+    {
+        if (is_dir($this->config['migrations_dir'])) {
+            return;
+        }
+        throw new MigrationException("O diretório informado em 'migration_dir' não é um diretório válido.");
     }
 }

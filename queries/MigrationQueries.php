@@ -2,7 +2,7 @@
 
 namespace ValidationQuery;
 
-class ValidationQuery
+class MigrationQueries
 {
     private static $migrationTable = 'migration';
 
@@ -17,12 +17,21 @@ class ValidationQuery
     public static function createMigrationTableSQL($migrationTable = null)
     {
         $migrationTable = $migrationTable ?: self::$migrationTable;
-        return "CREATE TABLE ".$migrationTable." (
+        return "CREATE TABLE " . $migrationTable . " (
             id_migration INT UNSIGNED auto_increment NOT NULL PRIMARY KEY,
-            `sql` TEXT NOT NULL,
+            `file` TEXT NOT NULL,
             batch varchar(100) NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NULL
         );";
+    }
+
+    public static function getMigrated($migrationTable = null)
+    {
+        $migrationTable = $migrationTable ?: self::$migrationTable;
+        return "SELECT
+            file
+        FROM
+            " . $migrationTable;
     }
 
 }
