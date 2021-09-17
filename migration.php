@@ -2,35 +2,42 @@
 
 namespace migration;
 
+use PDO;
 use ValidationQuery\ValidationQuery;
 
 class migration
 {
     /**
-     * @var \PDO
+     * @var PDO
      */
     private $connection;
 
-    public function __construct(\PDO $connection)
+    public function __construct(PDO $connection)
     {
         $this->connection = $connection;
         $this->checkIfMigrationTableExists();
     }
 
-    public static function run(\PDO $connection){
+    public static function run(PDO $connection){
         return (new self($connection))->migrate();
     }
 
-    public function migrate(\PDO $connection){
+    public function migrate(){
 
         return true;
     }
 
     private function checkIfMigrationTableExists()
     {
-        $result = $this->connection->query(ValidationQuery::MigrationExistsSQL());
-        if($result){
-            var_dump($result->fetch());
+        $query = $this->connection->prepare(ValidationQuery::MigrationExistsSQL());
+        $result = $query->execute();
+        if(!$result || $result['qtd'] < 1){
+            $this->createMigrationTable();
         }
+    }
+
+    private function createMigrationTable()
+    {
+        $this->connection->exec(ValidationQuery::createMigrationTableSQL());
     }
 }
