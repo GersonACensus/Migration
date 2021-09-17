@@ -34,4 +34,20 @@ class MigrationQueries
             " . $migrationTable;
     }
 
+    public static function LastBatchSQL($migrationTable = null)
+    {
+        $migrationTable = $migrationTable ?: self::$migrationTable;
+        return "SELECT
+            max(batch) AS batch 
+        FROM
+            " . $migrationTable;
+
+    }
+
+    public static function registerQuerySQL($migrationTable, $file, $batch)
+    {
+        $migrationTable = $migrationTable ?: self::$migrationTable;
+        return "INSERT INTO ".$migrationTable." (file, batch) values ('{$file}', '{$batch}')";
+    }
+
 }

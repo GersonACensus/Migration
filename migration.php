@@ -68,7 +68,8 @@ class migration
 
         $migrated = $this->getMigrated();
         $migrations = $this->getFilesMigration();
-        $this->compareMigrationWithMigrated($migrated, $migrations);
+        $files = $this->compareMigrationWithMigratedAndClear($migrated, $migrations);
+        $this->runMigration($files);
     }
 
 
@@ -80,11 +81,18 @@ class migration
     /**
      * @param $migrated
      * @param $migrations
+     * @return array
      */
-    private function compareMigrationWithMigrated($migrated, $migrations)
+    private function compareMigrationWithMigratedAndClear($migrated, $migrations)
     {
-        $toMigrate = array_diff($migrated, $migrations);
-        var_dump($toMigrate);
+        $toMigrate = array_diff($migrations, $migrated);
+        $newArrayToMigrate = [];
+        foreach ($toMigrate as $index => $item) {
+            if (strpos($item, '.sql'))
+                $newArrayToMigrate[] = $item;
+        }
+
+        return $newArrayToMigrate;
     }
 
     /**
@@ -116,5 +124,34 @@ class migration
             return;
         }
         throw new MigrationException("O diretório informado em 'migration_dir' não é um diretório válido.");
+    }
+
+    private function runMigration(array $files)
+    {
+        $batch = $this->getLastBathMoreOne();
+        $this->connection->beginTransaction();
+        foreach ($files as $index => $file) {
+            $sql = readfile($this->config['migrations_dir']."/".$file);
+            $this->executeMigrationFile($sql);
+            $this->registerMigration($batch, $file);
+        }
+        $this->connection->commit();
+    }
+
+    private function getLastBathMoreOne()
+    {
+        $query = $this->connection->prepare(MigrationQueries::LastBatchSQL($this->config['table']));
+        $query->execute();
+        return $query->fetch() + 1;
+    }
+
+    private function executeMigrationFile($sql)
+    {
+        $this->connection->exec($sql);
+    }
+
+    private function registerMigration($batch, $file)
+    {
+        $this->connection->exec(MigrationQueries::registerQuerySQL($this->config['table'], $file, $batch));
     }
 }
