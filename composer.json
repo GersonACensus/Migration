@@ -1,0 +1,15 @@
+{
+    "name": "gersonalves/migration",
+    "description": "Package para criar migrations em seu BD",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Gerson Alves",
+            "email": "gersonalvesdev@gmail.com"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {
+        "ext-pdo": "*"
+    }
+}
