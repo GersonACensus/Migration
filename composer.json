@@ -8,7 +8,6 @@
             "email": "gersonalvesdev@gmail.com"
         }
     ],
-    "minimum-stability": "stable",
     "require": {
         "ext-pdo": "*"
     }
