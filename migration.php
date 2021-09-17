@@ -31,6 +31,8 @@ class migration
             throw new MigrationException("O diretório das migrations é obrigatório");
         $this->config = array_merge($this->config, $config);
         $this->connection = $connection;
+        $this->connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $this->connection->setAttribute(PDO::ATTR_EMULATE_PREPARES, FALSE);
         $this->checkIfMigrationTableExists();
     }
 
@@ -47,16 +49,16 @@ class migration
 
     /**
      * @return bool
+     * @throws MigrationException
      */
     public function migrate()
     {
-
-        return true;
+        $migrated = $this->getMigrated();
+        $migrations = $this->getFilesMigration();
+        $files = $this->compareMigrationWithMigratedAndClear($migrated, $migrations);
+        return $this->runMigration($files);
     }
 
-    /**
-     * @throws MigrationException
-     */
     private function checkIfMigrationTableExists()
     {
         $query = $this->connection->prepare(MigrationQueries::MigrationExistsSQL($this->config['table']));
@@ -65,17 +67,13 @@ class migration
         if (!$result || $result['qtd'] < 1) {
             $this->createMigrationTable();
         }
-
-        $migrated = $this->getMigrated();
-        $migrations = $this->getFilesMigration();
-        $files = $this->compareMigrationWithMigratedAndClear($migrated, $migrations);
-        $this->runMigration($files);
     }
 
 
     private function createMigrationTable()
     {
-        $this->connection->exec(MigrationQueries::createMigrationTableSQL($this->config['table']));
+        $query = $this->connection->prepare(MigrationQueries::createMigrationTableSQL($this->config['table']));
+        $query->execute();
     }
 
     /**
@@ -85,13 +83,16 @@ class migration
      */
     private function compareMigrationWithMigratedAndClear($migrated, $migrations)
     {
+        $migrated = array_map(function ($item) {
+            return $item['file'];
+        }, $migrated);
         $toMigrate = array_diff($migrations, $migrated);
+
         $newArrayToMigrate = [];
         foreach ($toMigrate as $index => $item) {
             if (strpos($item, '.sql'))
                 $newArrayToMigrate[] = $item;
         }
-
         return $newArrayToMigrate;
     }
 
@@ -102,7 +103,7 @@ class migration
     {
         $query = $this->connection->prepare(MigrationQueries::getMigrated($this->config['table']));
         $query->execute();
-        return $query->fetch();
+        return $query->fetchAll();
     }
 
     /**
@@ -129,29 +130,37 @@ class migration
     private function runMigration(array $files)
     {
         $batch = $this->getLastBathMoreOne();
-        $this->connection->beginTransaction();
         foreach ($files as $index => $file) {
-            $sql = readfile($this->config['migrations_dir']."/".$file);
-            $this->executeMigrationFile($sql);
-            $this->registerMigration($batch, $file);
+            try {
+                $this->connection->beginTransaction();
+                ob_start();
+                readfile($this->config['migrations_dir'] . "/" . $file);
+                $sql = ob_get_clean();
+                $this->executeMigrationFile($sql);
+                $this->registerMigration($batch, $file);
+                $this->connection->commit();
+            } catch (\PDOException $e) {
+                throw new MigrationException("Não foi possível persistir a migration {$file}, SQL: {$sql}");
+            }
         }
-        $this->connection->commit();
     }
 
     private function getLastBathMoreOne()
     {
         $query = $this->connection->prepare(MigrationQueries::LastBatchSQL($this->config['table']));
         $query->execute();
-        return $query->fetch() + 1;
+        return ($query->fetch()['batch'] ?: 0) + 1;
     }
 
     private function executeMigrationFile($sql)
     {
-        $this->connection->exec($sql);
+        $query = $this->connection->prepare($sql);
+        $query->execute();
     }
 
     private function registerMigration($batch, $file)
     {
-        $this->connection->exec(MigrationQueries::registerQuerySQL($this->config['table'], $file, $batch));
+        $query = $this->connection->prepare(MigrationQueries::registerQuerySQL($this->config['table'], $file, $batch));
+        $query->execute();
     }
 }
