@@ -2,12 +2,15 @@
 
 namespace migration;
 
+use dictionaryClass;
 use MigrationException;
 use PDO;
+use PDOException;
 use ValidationQuery\MigrationQueries;
 
 class migration
 {
+    private $response;
     /**
      * @var PDO
      */
@@ -17,8 +20,16 @@ class migration
      */
     private $config = [
         'table' => null,
-        'migrations_dir' => null
+        'migrations_dir' => null,
+        'continueWithErrors' => false,
+        'onlyJSON' => false
     ];
+    /**
+     * @var array
+     */
+    private $sqlBag = [];
+
+    private $failedBag = [];
 
     /**
      * @param PDO $connection
@@ -27,8 +38,8 @@ class migration
      */
     public function __construct(PDO $connection, array $config = null)
     {
-        if (!$config['migrations_dir'])
-            throw new MigrationException("O diretório das migrations é obrigatório");
+        if (!isset($config['migrations_dir']) || !$config['migrations_dir'])
+            throw new MigrationException(dictionaryClass::dictionary('error.directory', ['migration_dir']));
         $this->config = array_merge($this->config, $config);
         $this->connection = $connection;
         $this->connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -39,7 +50,7 @@ class migration
     /**
      * @param PDO $connection
      * @param array|null $config
-     * @return bool
+     * @return migration
      * @throws MigrationException
      */
     public static function run(PDO $connection, array $config = null)
@@ -48,15 +59,24 @@ class migration
     }
 
     /**
-     * @return bool
+     * @return migration
      * @throws MigrationException
      */
     public function migrate()
     {
-        $migrated = $this->getMigrated();
-        $migrations = $this->getFilesMigration();
-        $files = $this->compareMigrationWithMigratedAndClear($migrated, $migrations);
-        return $this->runMigration($files);
+        try {
+            $migrated = $this->getMigrated();
+            $migrations = $this->getFilesMigration();
+            $files = $this->compareMigrationWithMigratedAndClear($migrated, $migrations);
+            $this->response = $this->runMigration($files);
+        } catch (MigrationException $e){
+            if(isset($this->config['onlyJSON']) && $this->config['onlyJSON']){
+                $this->response = ['status' => 'error', 'message' => $e->getMessage(), 'runned' => $this->sqlBag];
+            } else {
+                throw new MigrationException($e->getMessage());
+            }
+        }
+        return $this;
     }
 
     private function checkIfMigrationTableExists()
@@ -97,7 +117,7 @@ class migration
     }
 
     /**
-     * @return mixed
+     * @return array|false
      */
     private function getMigrated()
     {
@@ -124,12 +144,21 @@ class migration
         if (is_dir($this->config['migrations_dir'])) {
             return;
         }
-        throw new MigrationException("O diretório informado em 'migration_dir' não é um diretório válido.");
+        throw new MigrationException(dictionaryClass::dictionary('error.directory', ['migration_dir']));
     }
 
+    /**
+     * @param array $files
+     * @return array
+     * @throws MigrationException
+     */
     private function runMigration(array $files)
     {
+        if (empty($files))
+            return ['status' => 'success', 'message' => dictionaryClass::dictionary('msg.empty')];
         $batch = $this->getLastBathMoreOne();
+        $this->sqlBag = [];
+        $starttime = microtime(true);
         foreach ($files as $index => $file) {
             try {
                 $this->connection->beginTransaction();
@@ -139,10 +168,32 @@ class migration
                 $this->executeMigrationFile($sql);
                 $this->registerMigration($batch, $file);
                 $this->connection->commit();
-            } catch (\PDOException $e) {
-                throw new MigrationException("Não foi possível persistir a migration {$file}, SQL: {$sql}");
+                $this->sqlBag[] = $sql;
+            } catch (PDOException $e) {
+                if($this->config['continueWithErrors'] === false)
+                    throw new MigrationException(dictionaryClass::dictionary("error.persistence", [$file, $sql]));
+
+                $this->failedBag[] = $sql;
+                continue;
             }
         }
+        if(!count($this->sqlBag))
+            return ['status' => 'success',
+                'message' => dictionaryClass::dictionary('msg.onlyFailed'),
+                'failed' => $this->failedBag
+            ];
+
+        $endtime = microtime(true);
+        return [
+            'status' => 'success',
+            'message' => dictionaryClass::dictionary('msg.success', ['migração']),
+            'finish' => $this->sqlBag,
+            'failed' => $this->failedBag,
+            'informations' => [
+                'quantity' => count($this->sqlBag),
+                'duration' => round($this->microtime_float($endtime - $starttime), 2) . ' seconds'
+            ]
+        ];
     }
 
     private function getLastBathMoreOne()
@@ -152,8 +203,13 @@ class migration
         return ($query->fetch()['batch'] ?: 0) + 1;
     }
 
+    /**
+     * @param $sql
+     * @throws MigrationException
+     */
     private function executeMigrationFile($sql)
     {
+        $this->security($sql);
         $query = $this->connection->prepare($sql);
         $query->execute();
     }
@@ -163,4 +219,51 @@ class migration
         $query = $this->connection->prepare(MigrationQueries::registerQuerySQL($this->config['table'], $file, $batch));
         $query->execute();
     }
+
+    /**
+     * @param $sql
+     * @throws MigrationException
+     */
+    private function security($sql)
+    {
+        $badStrings = ['DROP', 'TRUNCATE', 'DELETE'];
+        foreach ($badStrings as $index => $badString) {
+            if (strpos(strtoupper($sql), strtoupper($badString)) !== false) {
+                throw new MigrationException(dictionaryClass::dictionary('error.notAuthorized', [$sql]));
+            }
+        }
+
+        if (strpos(strtoupper($sql), 'UPDATE') !== false && strpos(strtoupper($sql), 'WHERE') === false)
+            throw new MigrationException(dictionaryClass::dictionary('error.notAuthorized', [$sql]));
+
+    }
+
+    public function getJson()
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($this->response);
+    }
+
+    public function getArray()
+    {
+        return $this->response;
+    }
+
+    public function __get($name)
+    {
+        return $this->response ?: ['status' => 'error', 'message' => 'Nenhuma transação foi processada ainda!'];
+    }
+
+    function microtime_float($time)
+    {
+        list($sec) = explode(" ", $time);
+        return (float) $sec;
+    }
+
+    public function getResponse()
+    {
+        return $this->config['onlyJSON'] ? $this->getJson() : $this->response;
+    }
+
+
 }

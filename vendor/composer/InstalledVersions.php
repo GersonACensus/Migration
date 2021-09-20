@@ -30,7 +30,7 @@ class InstalledVersions
     'aliases' => 
     array (
     ),
-    'reference' => '7a056ea4de0387349fff53fad6d39157c7f6f194',
+    'reference' => '0dc8bc59f96c930f7b2c2e960e6fe1e656817cc6',
     'name' => 'gersonalves/migration',
   ),
   'versions' => 
@@ -42,7 +42,7 @@ class InstalledVersions
       'aliases' => 
       array (
       ),
-      'reference' => '7a056ea4de0387349fff53fad6d39157c7f6f194',
+      'reference' => '0dc8bc59f96c930f7b2c2e960e6fe1e656817cc6',
     ),
   ),
 );
