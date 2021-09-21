@@ -6,12 +6,14 @@ class dictionaryClass
         'msg' => [
             'success' => '%s realizado com sucesso',
             'empty' => 'Nenhuma migração para ser executada',
-            'onlyFailed' => 'Nenhuma das migrações foram executadas',
+            'onlyFailed' => 'Nenhuma das migração foi executada',
+            'unprocessed' => 'Nenhuma transação foi processada ainda!',
         ],
         'error' => [
             'persistence' => "Não foi possível persistir a migração %s, SQL: %s",
             'notAuthorized' => "Não é permitido executar esse tipo de SQL. SQL: %s",
-            'directory' => "O diretório informado em '%s' não é um diretório válido."
+            'directory' => "O diretório informado em '%s' não é um diretório válido.",
+            'notValidEmail' => "O e-mail informado para notificações não é válido"
         ]
     ];
 

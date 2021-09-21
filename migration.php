@@ -30,6 +30,10 @@ class migration
     private $sqlBag = [];
 
     private $failedBag = [];
+    /**
+     * @var bool|void
+     */
+    private $sendMail = false;
 
     /**
      * @param PDO $connection
@@ -62,16 +66,18 @@ class migration
      * @return migration
      * @throws MigrationException
      */
-    public function migrate()
+    private function migrate()
     {
         try {
             $migrated = $this->getMigrated();
             $migrations = $this->getFilesMigration();
             $files = $this->compareMigrationWithMigratedAndClear($migrated, $migrations);
             $this->response = $this->runMigration($files);
-        } catch (MigrationException $e){
-            if(isset($this->config['onlyJSON']) && $this->config['onlyJSON']){
+        } catch (MigrationException $e) {
+            $this->sendMail = $this->checkAndSendNotify($e->getMessage());
+            if ($this->isJson()) {
                 $this->response = ['status' => 'error', 'message' => $e->getMessage(), 'runned' => $this->sqlBag];
+
             } else {
                 throw new MigrationException($e->getMessage());
             }
@@ -155,7 +161,7 @@ class migration
     private function runMigration(array $files)
     {
         if (empty($files))
-            return ['status' => 'success', 'message' => dictionaryClass::dictionary('msg.empty')];
+            return ['status' => 'success', 'message' => dictionaryClass::dictionary('msg.empty'), 'email_sent' => $this->sendMail ?: false];
         $batch = $this->getLastBathMoreOne();
         $this->sqlBag = [];
         $starttime = microtime(true);
@@ -170,25 +176,30 @@ class migration
                 $this->connection->commit();
                 $this->sqlBag[] = $sql;
             } catch (PDOException $e) {
-                if($this->config['continueWithErrors'] === false)
+                if ($this->config['continueWithErrors'] === false)
                     throw new MigrationException(dictionaryClass::dictionary("error.persistence", [$file, $sql]));
 
                 $this->failedBag[] = $sql;
                 continue;
             }
         }
-        if(!count($this->sqlBag))
-            return ['status' => 'success',
+        if (!count($this->sqlBag)) {
+            $this->sendMail = $this->checkAndSendNotify(dictionaryClass::dictionary("msg.onlyFailed"));
+            return [
+                'status' => 'success',
                 'message' => dictionaryClass::dictionary('msg.onlyFailed'),
-                'failed' => $this->failedBag
+                'failed' => array_unique($this->failedBag),
+                'email_sent' => $this->sendMail ?: false
             ];
+        }
 
         $endtime = microtime(true);
         return [
             'status' => 'success',
             'message' => dictionaryClass::dictionary('msg.success', ['migração']),
             'finish' => $this->sqlBag,
-            'failed' => $this->failedBag,
+            'failed' => array_unique($this->failedBag),
+            'email_sent' => $this->sendMail ?: false,
             'informations' => [
                 'quantity' => count($this->sqlBag),
                 'duration' => round($this->microtime_float($endtime - $starttime), 2) . ' seconds'
@@ -238,10 +249,14 @@ class migration
 
     }
 
-    public function getJson()
+    public function getJson($isReturn = false)
     {
+        if ($isReturn)
+            return (object)$this->response;
+
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($this->response);
+        return null;
     }
 
     public function getArray()
@@ -249,20 +264,35 @@ class migration
         return $this->response;
     }
 
+    /**
+     * @throws MigrationException
+     */
     public function __get($name)
     {
-        return $this->response ?: ['status' => 'error', 'message' => 'Nenhuma transação foi processada ainda!'];
+        return $this->response ?: ['status' => 'error', 'message' => dictionaryClass::dictionary('msg.unprocessed')];
     }
 
     function microtime_float($time)
     {
         list($sec) = explode(" ", $time);
-        return (float) $sec;
+        return (float)$sec;
     }
 
     public function getResponse()
     {
-        return $this->config['onlyJSON'] ? $this->getJson() : $this->response;
+        return ($this->isJson() ? $this->getJson(true) : $this->getArray());
+    }
+
+    private function checkAndSendNotify($msg)
+    {
+        if (isset($this->config['mailTo']) && $this->config['mailTo'])
+            return (notify::init($this->config['mailTo']))
+                ->sendNotify($msg, ['errors' => array_unique($this->failedBag), 'success' => $this->sqlBag]);
+    }
+
+    private function isJson()
+    {
+        return isset($this->config['onlyJSON']) && $this->config['onlyJSON'];
     }
 
 

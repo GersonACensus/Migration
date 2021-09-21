@@ -13,4 +13,4 @@ $migration = migration::run($myConnection, [
     'onlyJSON' => true,
     'continueWithErrors' => true
 ]);
-$migration->getResponse();
+$migration->getJson();
