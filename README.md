@@ -47,4 +47,4 @@ On JSON Success
   }
 ```
 
-For more infomations, have images examples HERE:
+Ps: For all errors, the "status" is "error" regardless of using JSON or not. 
