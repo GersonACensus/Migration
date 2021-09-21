@@ -54,6 +54,7 @@ DROP, TRUNCATE, DELETE, UPDATE without WHERE.
 
 - In the next update, it will inform you which ones you want to allow. 
 - For all errors, the "status" is "error" regardless of using JSON or not. 
+- Only ``.sql`` files will be executed. 
 
 # Public methods
 - static RUN() - This is the framework's main method, responsible for making the necessary validations and executing a migration. 
