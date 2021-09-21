@@ -30,7 +30,7 @@ The second parameter is the configuration, here are some important information.
 
 - table - This is the field to define the migration log table. Default 'migrations'
 - migrations_dir - This is the directory to save yours .sql files to migrate. Default is null.
-- onlyJSON - if is true, the response have a JSON header. If false. Default false.
+- onlyJSON - if is true, the response have a JSON header. If false the response is an Array. Default false.
 - continueWithErrors - If is true, when an error occurs, the other migrations will be persisted and it will return a list with successes and failures. if false, on error the interrupt the migration script and return a throw exception. Default false.
 
 #Responses examples
