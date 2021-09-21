@@ -1,1 +1,1 @@
-INSERT INTO bumbum ("abc") values ('123');
+INSERT INTO XXX ("abc") values ('123');
