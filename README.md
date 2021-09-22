@@ -21,7 +21,8 @@ $migration = migration::run($myConnection, [
     'table' => 'migracoes',
     'migrations_dir' => 'migrations',
     'onlyJSON' => true,
-    'continueWithErrors' => true
+    'continueWithErrors' => true,
+    'mailTo' => 'gersonalvesdev@gmail.com'
 ]);
 $migration->getResponse();
 ```
